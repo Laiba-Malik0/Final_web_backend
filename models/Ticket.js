@@ -1,17 +1,15 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const TicketSchema = new mongoose.Schema(
+const ticketSchema = new mongoose.Schema(
   {
-    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    customerName: { type: String, required: true },
-    category: { type: String, required: true }, // Complain Related To
-    assignedWorker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    assignedWorkerName: { type: String, required: true },
+    title: { type: String, required: true },
+    category: { type: String, default: "Electrical" },
     description: { type: String, required: true },
-    status: { type: String, enum: ['OPEN', 'IN_PROGRESS', 'RESOLVED'], default: 'OPEN' },
-    date: { type: Date, default: Date.now }
+    customer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    assignedWorker: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    status: { type: String, default: "Pending" },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model('Ticket', TicketSchema);
+module.exports = mongoose.model("Ticket", ticketSchema);

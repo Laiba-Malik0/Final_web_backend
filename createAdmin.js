@@ -1,9 +1,6 @@
-// createAdmin.js
 require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-
-// User Schema Direct Reference (Path issue se bachne ke liye)
 const User = require('./models/User');
 
 const createAdmin = async () => {
@@ -12,27 +9,12 @@ const createAdmin = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ MongoDB Connected Successfully!');
 
-    // 1. Check if Admin Email Already Exists
-    const adminEmail = 'admin@gmail.com';
-    const existingUser = await User.findOne({ email: adminEmail });
-
-    if (existingUser) {
-      console.log(`⚠️ User with email ${adminEmail} already exists!`);
-      
-      // Agar user pehle se hai lekin role admin nahi hai, to update kardo
-      if (existingUser.role !== 'admin') {
-        existingUser.role = 'admin';
-        await existingUser.save();
-        console.log('🔄 User role updated to ADMIN!');
-      }
-      
-      process.exit(0);
-    }
-
-    // 2. Hash Password
+    const adminEmail = 'admin@supportflow.com';
     const hashedPassword = await bcrypt.hash('admin123', 10);
 
-    // 3. Create Admin Object
+    // Old gmail wala email agar database me hai to clean up karke naya supportflow admin banayega
+    await User.deleteMany({ email: { $in: ['admin@gmail.com', 'admin@supportflow.com'] } });
+
     const newAdmin = new User({
       name: 'System Admin',
       email: adminEmail,
@@ -40,7 +22,6 @@ const createAdmin = async () => {
       role: 'admin'
     });
 
-    // 4. Save to Database
     await newAdmin.save();
 
     console.log('\n==================================');
@@ -50,7 +31,6 @@ const createAdmin = async () => {
     console.log('==================================\n');
 
     process.exit(0);
-
   } catch (error) {
     console.error('❌ Error creating admin:', error.message);
     process.exit(1);
