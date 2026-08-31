@@ -2,16 +2,48 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
+const http = require('http');
+const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 const User = require('./models/User');
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
-app.use(cors());
 
-// Global DB Connection & Admin Auto-seed Middleware for Serverless
+// 1. Configure CORS for REST APIs
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+app.use(express.json());
+
+// 2. Setup HTTP Server & Socket.io
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('⚡ Socket client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('🔥 Socket client disconnected:', socket.id);
+  });
+});
+
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
+// 3. Global DB Connection & Admin Auto-seed Setup
 let isDbConnected = false;
 
 const initDB = async () => {
@@ -19,6 +51,7 @@ const initDB = async () => {
   try {
     await connectDB();
     isDbConnected = true;
+    console.log('✅ MongoDB Connected Successfully!');
     
     // Seed Admin automatically
     const adminEmail = 'admin@supportflow.com';
@@ -39,26 +72,29 @@ const initDB = async () => {
   }
 };
 
-// Ensure DB connects before processing any request
+// Ensure DB connects on every Vercel request
 app.use(async (req, res, next) => {
   await initDB();
   next();
 });
 
-// Root Health Check Route (Fixes 404 / Cannot GET /)
+// 4. Root Health Check Route
 app.get('/', (req, res) => {
   res.send('SupportSphere Backend Server is Running Successfully!');
 });
 
-// Routes
+// 5. Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/tickets', require('./routes/ticketRoutes'));
 
-// Local development listener
+// 6. Local development listener with auto DB connection
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`SupportSphere Server running on port ${PORT}`));
+  server.listen(PORT, async () => {
+    console.log(`SupportSphere Server running on port ${PORT}`);
+    await initDB(); // Local start hotey hi DB connect karega
+  });
 }
 
-// Export app for Vercel Serverless Functions
+// Export app for Vercel
 module.exports = app;
