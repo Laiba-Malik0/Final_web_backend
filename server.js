@@ -11,9 +11,12 @@ dotenv.config();
 
 const app = express();
 
-// 1. CORS Configuration
+// Allowed Origins (Production Frontend URL + Fallback)
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://final-web-project-six.vercel.app';
+
+// 1. Configure CORS for Express REST APIs
 app.use(cors({
-  origin: '*',
+  origin: ALLOWED_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -25,8 +28,9 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
+    origin: ALLOWED_ORIGIN,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
   }
 });
 
@@ -44,7 +48,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 3. Database Connection & Admin Auto-Seed
+// 3. Global DB Connection & Admin Auto-seed Setup
 let dbPromise = null;
 
 const initDB = async () => {
@@ -53,7 +57,7 @@ const initDB = async () => {
       await connectDB();
       console.log('✅ MongoDB Connected Successfully!');
 
-      // Seed Admin automatically if not present
+      // Seed Admin automatically
       const adminEmail = process.env.ADMIN_EMAIL || 'admin@supportflow.com';
       const existingAdmin = await User.findOne({ email: adminEmail });
 
@@ -73,7 +77,7 @@ const initDB = async () => {
   return dbPromise;
 };
 
-// Middleware for serverless environments (e.g. Vercel) to guarantee DB connection
+// Middleware for serverless environments (Vercel) to guarantee DB connection
 app.use(async (req, res, next) => {
   try {
     await initDB();
@@ -84,12 +88,12 @@ app.use(async (req, res, next) => {
   }
 });
 
-// 4. Health Check Route
+// 4. Root Health Check Route
 app.get('/', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'SupportSphere Backend Server is Running!' });
+  res.status(200).json({ status: 'ok', message: 'SupportSphere Backend Server is Running Successfully!' });
 });
 
-// 5. API Routes Setup
+// 5. Routes Setup
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/tickets', require('./routes/ticketRoutes'));
 
@@ -100,13 +104,13 @@ try {
   console.warn('⚠️ Warning: Admin routes file missing or path incorrect:', err.message);
 }
 
-// 6. Local Server Listener (For non-serverless like Render/Railway/Local)
+// 6. Local development listener
 const PORT = process.env.PORT || 5000;
-
 if (process.env.NODE_ENV !== 'production') {
   server.listen(PORT, () => {
     console.log(`🚀 SupportSphere Server running on port ${PORT}`);
   });
 }
 
+// Export app for Vercel
 module.exports = app;
