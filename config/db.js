@@ -2,19 +2,25 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
   try {
-    // Re-use existing connection in serverless environment
+    // Mongo URI Missing Check
+    if (!process.env.MONGO_URI) {
+      throw new Error('MONGO_URI is missing in environment variables');
+    }
+
+    // Re-use existing connection (Serverless / Vercel Optimization)
     if (mongoose.connection.readyState >= 1) {
       return;
     }
 
     const conn = await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000, // Timeout fast handle karne ke liye
+      serverSelectionTimeoutMS: 5000, // Quick failover
     });
+
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`Database Connection Error: ${error.message}`);
-    // Serverless me process.exit(1) NAHIN karna, aksar is se Vercel crash ho jata hai
-    throw new Error('Database connection failed');
+    // Original error pass karein taakay exact issue trace ho sakay
+    throw error;
   }
 };
 

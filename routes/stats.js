@@ -1,45 +1,38 @@
 const express = require('express');
 const router = express.Router();
+const Ticket = require('../models/Ticket');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
-// Option A: Agar Middleware Object ke roop me export hai
-const authModule = require('../middleware/auth');
-const auth = typeof authModule === 'function' ? authModule : (authModule.auth || authModule.default);
-
-// Alternate Middleware Handler for Roles (Safe Fallback)
-const checkAuth = (allowedRoles = []) => {
-  return (req, res, next) => {
-    if (typeof auth === 'function') {
-      // Agar auth standard Express middleware hai
-      if (auth.length === 3) {
-        return auth(req, res, () => {
-          if (allowedRoles.length > 0 && req.user && !allowedRoles.includes(req.user.role?.toUpperCase())) {
-            return res.status(403).json({ message: 'Access Denied: Unauthorized Role' });
-          }
-          next();
-        });
-      }
-      // Agar auth wrapper function hai auth(roles)
-      return auth(allowedRoles)(req, res, next);
-    }
-    next();
-  };
-};
-
-// GET Stats Route
-router.get('/', checkAuth(['AGENT', 'ADMIN', 'WORKER']), async (req, res) => {
+// GET Real-time Stats Analytics Route
+router.get('/', protect, authorize('admin', 'worker', 'customer'), async (req, res) => {
   try {
-    // Basic stats object return karein
+    // Database se dynamic real-time ticket analytics count karein
+    const totalTickets = await Ticket.countDocuments();
+    const pendingTickets = await Ticket.countDocuments({ status: 'Pending' });
+    const inProgressTickets = await Ticket.countDocuments({ status: 'In Progress' });
+    const resolvedTickets = await Ticket.countDocuments({ 
+      status: { $in: ['Approved', 'Completed'] } 
+    });
+    const rejectedTickets = await Ticket.countDocuments({ status: 'Rejected' });
+
     res.status(200).json({
       success: true,
       message: "Stats loaded successfully",
       stats: {
-        totalTickets: 0,
-        pendingTickets: 0,
-        resolvedTickets: 0
+        totalTickets,
+        pendingTickets,
+        inProgressTickets,
+        resolvedTickets,
+        rejectedTickets
       }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Stats API Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to load dashboard stats", 
+      error: error.message 
+    });
   }
 });
 

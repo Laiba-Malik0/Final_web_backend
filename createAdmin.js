@@ -9,11 +9,12 @@ const createAdmin = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ MongoDB Connected Successfully!');
 
-    const adminEmail = 'admin@supportflow.com';
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@supportflow.com').toLowerCase().trim();
+    const rawPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-    // Old gmail wala email agar database me hai to clean up karke naya supportflow admin banayega
-    await User.deleteMany({ email: { $in: ['admin@gmail.com', 'admin@supportflow.com'] } });
+    // Old entries cleanup
+    await User.deleteMany({ email: { $in: ['admin@gmail.com', 'admin@supportsphere.com', adminEmail] } });
 
     const newAdmin = new User({
       name: 'System Admin',
@@ -27,7 +28,7 @@ const createAdmin = async () => {
     console.log('\n==================================');
     console.log('🎉 SUCCESS! Admin Created Successfully');
     console.log(`Email: ${adminEmail}`);
-    console.log('Password: admin123');
+    console.log(`Password: ${rawPassword}`);
     console.log('==================================\n');
 
     process.exit(0);
