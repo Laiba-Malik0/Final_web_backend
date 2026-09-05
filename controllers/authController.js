@@ -4,10 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../utils/sendEmailTest');
 
-// 1. Register User
 exports.register = async (req, res) => {
   const { name, email, password, role } = req.body;
-
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Name, email, and password are required' });
   }
@@ -27,11 +25,10 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Cannot register directly as Admin' });
     }
 
-    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
     user = await User.create({
       name: name.trim(),
       email: cleanEmail,
-      password: hashedPassword,
+      password: cleanPassword, 
       role: role || 'customer'
     });
 
@@ -41,10 +38,8 @@ exports.register = async (req, res) => {
   }
 };
 
-// 2. Login (With Safe Auto-Admin Seed & Role Validation)
 exports.login = async (req, res) => {
   const { email, password, role } = req.body;
-
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required' });
   }
@@ -54,21 +49,20 @@ exports.login = async (req, res) => {
 
   try {
     let user = await User.findOne({ email: cleanEmail });
+    const envAdminEmail = (process.env.ADMIN_EMAIL || 'admin@supportsphere.com').toLowerCase().trim();
+    const envAdminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-    // --- AUTO-SEED ADMIN IF NOT EXISTS ---
-    if (!user && cleanEmail === 'admin@supportsphere.com' && cleanPassword === 'admin123') {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+    if (!user && cleanEmail === envAdminEmail && cleanPassword === envAdminPassword) {
       user = await User.create({
         name: 'System Admin',
-        email: 'admin@supportsphere.com',
-        password: hashedPassword,
+        email: envAdminEmail,
+        password: envAdminPassword,
         role: 'admin'
       });
     }
 
     if (!user) return res.status(400).json({ message: 'Invalid Credentials' });
 
-    // Optional Role Validation Check
     if (role && user.role !== role) {
       return res.status(400).json({
         message: `This account is registered as ${user.role.toUpperCase()}, not ${role.toUpperCase()}`
@@ -79,7 +73,7 @@ exports.login = async (req, res) => {
     if (!isMatch) return res.status(400).json({ message: 'Invalid Credentials' });
 
     const jwtSecret = process.env.JWT_SECRET || 'fallback_secret_key';
-    const token = jwt.sign({ id: user._id, role: user.role }, jwtSecret, { expiresIn: '1d' });
+    const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, jwtSecret, { expiresIn: '1d' });
 
     res.json({
       token,
@@ -90,7 +84,6 @@ exports.login = async (req, res) => {
   }
 };
 
-// 3. Send OTP
 exports.sendOTP = async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: 'Email is required' });
@@ -102,8 +95,10 @@ exports.sendOTP = async (req, res) => {
     if (!user) return res.status(404).json({ message: 'No account with this email' });
 
     const generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOTP = await bcrypt.hash(generatedOTP, 10);
+
     await OTP.deleteMany({ email: cleanEmail });
-    await OTP.create({ email: cleanEmail, otp: generatedOTP });
+    await OTP.create({ email: cleanEmail, otp: hashedOTP });
 
     await sendEmail(cleanEmail, 'SupportSphere - Password Reset OTP', `Your Password Reset OTP is: ${generatedOTP}. It expires in 5 minutes.`);
     res.json({ message: 'OTP sent to your email' });
@@ -112,14 +107,18 @@ exports.sendOTP = async (req, res) => {
   }
 };
 
-// 4. Verify OTP
 exports.verifyOTP = async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp) return res.status(400).json({ message: 'Email and OTP are required' });
 
   try {
-    const validOtp = await OTP.findOne({ email: email.trim().toLowerCase(), otp: otp.trim() });
-    if (!validOtp) return res.status(400).json({ message: 'Invalid or Expired OTP' });
+    const cleanEmail = email.trim().toLowerCase();
+    const otpRecord = await OTP.findOne({ email: cleanEmail });
+
+    if (!otpRecord) return res.status(400).json({ message: 'Invalid or Expired OTP' });
+
+    const isValid = await bcrypt.compare(otp.trim(), otpRecord.otp);
+    if (!isValid) return res.status(400).json({ message: 'Invalid or Expired OTP' });
 
     res.json({ message: 'OTP Verified successfully' });
   } catch (err) {
@@ -127,7 +126,6 @@ exports.verifyOTP = async (req, res) => {
   }
 };
 
-// 5. Reset Password
 exports.resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
   if (!email || !otp || !newPassword) {
@@ -142,14 +140,16 @@ exports.resetPassword = async (req, res) => {
   }
 
   try {
-    const validOtp = await OTP.findOne({ email: cleanEmail, otp: otp.trim() });
-    if (!validOtp) return res.status(400).json({ message: 'Session expired. Try OTP again.' });
+    const otpRecord = await OTP.findOne({ email: cleanEmail });
+    if (!otpRecord) return res.status(400).json({ message: 'Session expired. Try OTP again.' });
+
+    const isValid = await bcrypt.compare(otp.trim(), otpRecord.otp);
+    if (!isValid) return res.status(400).json({ message: 'Invalid or Expired OTP' });
 
     const user = await User.findOne({ email: cleanEmail });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
-    user.password = hashedPassword;
+    user.password = cleanPassword; 
     await user.save();
 
     await OTP.deleteMany({ email: cleanEmail });
@@ -160,7 +160,6 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
-// 6. Fetch Workers List
 exports.getWorkers = async (req, res) => {
   try {
     const workers = await User.find({ role: 'worker' }).select('_id name email department');
