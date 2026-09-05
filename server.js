@@ -10,20 +10,7 @@ dotenv.config();
 
 const app = express();
 
-// Force Global CORS Headers for Vercel Serverless Functions
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://final-web-project-six.vercel.app');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-// 1. Configure Dynamic CORS for Production & Local Development
+// 1. Unified CORS Configuration (Supports Production & Local)
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'https://final-web-project-six.vercel.app',
@@ -31,7 +18,7 @@ const allowedOrigins = [
   'http://localhost:3000'
 ].filter(Boolean);
 
-app.use(cors({
+const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
@@ -39,24 +26,25 @@ app.use(cors({
     }
     return callback(null, true);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+// Apply CORS globally and handle Preflight requests explicitly
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 
-// 2. Setup HTTP Server & Socket.io (With Serverless Fallback)
+// 2. Setup HTTP Server & Socket.io
 const server = http.createServer(app);
 let io;
 
 if (process.env.NODE_ENV !== 'production') {
   io = new Server(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      credentials: true
-    }
+    cors: corsOptions
   });
 
   io.on('connection', (socket) => {
