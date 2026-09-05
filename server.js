@@ -10,6 +10,19 @@ dotenv.config();
 
 const app = express();
 
+// Force Global CORS Headers for Vercel Serverless Functions
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://final-web-project-six.vercel.app');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // 1. Configure Dynamic CORS for Production & Local Development
 const allowedOrigins = [
   process.env.FRONTEND_URL,
@@ -20,12 +33,11 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, or Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
-    return callback(null, true); // Fallback allow for dynamic preview deployments
+    return callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -72,7 +84,6 @@ const initDB = async () => {
     isConnected = true;
     console.log('✅ MongoDB Connected Successfully!');
 
-    // Seed Admin automatically without manual double-hashing
     const adminEmail = (process.env.ADMIN_EMAIL || 'admin@supportflow.com').toLowerCase().trim();
     const existingAdmin = await User.findOne({ email: adminEmail });
 
@@ -81,7 +92,7 @@ const initDB = async () => {
       await User.create({
         name: 'System Admin',
         email: adminEmail,
-        password: adminPassword, // Model hook handles hashing naturally
+        password: adminPassword,
         role: 'admin'
       });
       console.log('✅ Default Admin Verified & Ready');
