@@ -12,7 +12,7 @@ dotenv.config();
 const app = express();
 
 /* =========================================
-   CORS CONFIGURATION (VERCEL SERVERLESS SAFE)
+   CORS CONFIGURATION (EXPLICIT & PRODUCTION SAFE)
 ========================================= */
 
 const allowedOrigins = [
@@ -22,37 +22,33 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, server-to-server)
-      if (!origin) return callback(null, true);
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: [
+    "X-CSRF-Token",
+    "X-Requested-With",
+    "Accept",
+    "Accept-Version",
+    "Content-Length",
+    "Content-MD5",
+    "Content-Type",
+    "Date",
+    "X-Api-Version",
+    "Authorization",
+  ],
+};
 
-      if (
-        allowedOrigins.includes(origin) ||
-        origin.endsWith(".vercel.app")
-      ) {
-        return callback(null, true);
-      } else {
-        return callback(null, true); // Fallback to allow connection
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "X-CSRF-Token",
-      "X-Requested-With",
-      "Accept",
-      "Accept-Version",
-      "Content-Length",
-      "Content-MD5",
-      "Content-Type",
-      "Date",
-      "X-Api-Version",
-      "Authorization",
-    ],
-  })
-);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // Handle Explicit Preflight Options Call
 
 app.use(express.json());
 
@@ -79,19 +75,13 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
-/* =========================================
-   SAFE SOCKET INSTANCE
-========================================= */
-
 app.use((req, res, next) => {
-  req.io = io || {
-    emit: () => {},
-  };
+  req.io = io || { emit: () => {} };
   next();
 });
 
 /* =========================================
-   MONGODB CONNECTION (CACHED)
+   SERVERLESS MONGODB CONNECTION MIDDLEWARE
 ========================================= */
 
 let isConnected = false;
@@ -104,12 +94,7 @@ const initDB = async () => {
     isConnected = true;
     console.log("✅ MongoDB Connected Successfully!");
 
-    const adminEmail = (
-      process.env.ADMIN_EMAIL || "admin@supportsphere.com"
-    )
-      .toLowerCase()
-      .trim();
-
+    const adminEmail = (process.env.ADMIN_EMAIL || "admin@supportsphere.com").toLowerCase().trim();
     const existingAdmin = await User.findOne({ email: adminEmail });
 
     if (!existingAdmin) {
@@ -127,11 +112,14 @@ const initDB = async () => {
   }
 };
 
-// DB initialization call
-initDB();
+// Middleware ensuring DB connection before executing request logic
+app.use(async (req, res, next) => {
+  await initDB();
+  next();
+});
 
 /* =========================================
-   HEALTH CHECK
+   HEALTH CHECK & API ROUTES
 ========================================= */
 
 app.get("/", (req, res) => {
@@ -140,10 +128,6 @@ app.get("/", (req, res) => {
     message: "SupportSphere Backend Server is Running Successfully!",
   });
 });
-
-/* =========================================
-   API ROUTES
-========================================= */
 
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/tickets", require("./routes/ticketRoutes"));
@@ -156,7 +140,7 @@ try {
 }
 
 /* =========================================
-   404 HANDLER
+   404 & ERROR HANDLER
 ========================================= */
 
 app.use((req, res) => {
@@ -165,10 +149,6 @@ app.use((req, res) => {
     message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
-
-/* =========================================
-   ERROR HANDLER
-========================================= */
 
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err.message);
@@ -179,14 +159,13 @@ app.use((err, req, res, next) => {
 });
 
 /* =========================================
-   LOCAL SERVER
+   LOCAL SERVER LISTEN
 ========================================= */
 
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== "production") {
-  server.listen(PORT, async () => {
-    await initDB();
+  server.listen(PORT, () => {
     console.log(`🚀 SupportSphere Server running on port ${PORT}`);
   });
 }

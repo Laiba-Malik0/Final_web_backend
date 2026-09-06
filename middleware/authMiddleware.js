@@ -4,7 +4,8 @@ const jwt = require('jsonwebtoken');
 const protect = (req, res, next) => {
   let token = req.headers.authorization;
 
-  if (token && token.startsWith('Bearer')) {
+  // Case-insensitive check for 'Bearer '
+  if (token && token.toLowerCase().startsWith('bearer ')) {
     try {
       token = token.split(' ')[1];
       
@@ -14,7 +15,6 @@ const protect = (req, res, next) => {
       req.user = decoded; // Contains id, role, etc.
       next();
     } catch (error) {
-      // Terminal me repeated logs avoid karne ke liye error print skip kar rahe hain
       return res.status(401).json({ message: 'Unauthorized, Token Invalid or Expired' });
     }
   } else {
@@ -22,20 +22,29 @@ const protect = (req, res, next) => {
   }
 };
 
-// 2. Admin Only Middleware
+// 2. Admin Only Middleware (Safe Case Check)
 const adminOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  const userRole = req.user?.role?.toLowerCase()?.trim();
+
+  if (userRole === 'admin') {
     next();
   } else {
     return res.status(403).json({ message: 'Access Denied: Admins Only' });
   }
 };
 
-// 3. Dynamic Role Authorization Middleware
+// 3. Dynamic Role Authorization Middleware (Safe Case Check)
 const authorize = (...roles) => {
+  // Pass kiye gaye roles ko lowercase array mein convert kar rahe hain
+  const normalizedRoles = roles.map((r) => r.toLowerCase().trim());
+
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: `Access Denied: Role '${req.user?.role}' is not authorized` });
+    const userRole = req.user?.role?.toLowerCase()?.trim();
+
+    if (!userRole || !normalizedRoles.includes(userRole)) {
+      return res.status(403).json({ 
+        message: `Access Denied: Role '${req.user?.role}' is not authorized` 
+      });
     }
     next();
   };
