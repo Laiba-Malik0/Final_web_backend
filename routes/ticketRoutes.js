@@ -20,6 +20,6 @@ router.get('/my-assigned', protect, getWorkerTickets);
 router.put('/update-status/:id', protect, updateTicketStatus);
 router.put('/status/:id', protect, updateTicketStatus);
 router.put('/update/:id', protect, updateTicket);
-router.delete('/delete/:id', protect, deleteTicket);
+router.delete('/delete/:id', protect, adminOnly, deleteTicket);
 
 module.exports = router;

@@ -159,7 +159,9 @@ exports.resetPassword = async (req, res) => {
     const user = await User.findOne({ email: cleanEmail });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.password = cleanPassword; 
+    // Explicit bcrypt hashing so password is never stored as plain text
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(cleanPassword, salt);
     await user.save();
 
     await OTP.deleteMany({ email: cleanEmail });
