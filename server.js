@@ -22,44 +22,35 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 
-// 1. FORCE MANUAL HEADERS BEFORE ANY ROUTING / DB (Fixes OPTIONS Preflight Crash)
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (
-    allowedOrigins.includes(origin) ||
-    (origin && origin.endsWith(".vercel.app"))
-  ) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else {
-    res.setHeader(
-      "Access-Control-Allow-Origin",
-      "https://final-web-project-six.vercel.app"
-    );
-  }
-
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
-  );
-
-  // Return immediately on OPTIONS preflight
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-  next();
-});
-
-// Standard Express CORS Setup
 app.use(
   cors({
-    origin: true,
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app")
+      ) {
+        return callback(null, true);
+      } else {
+        return callback(null, true); // Fallback to allow connection
+      }
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "X-CSRF-Token",
+      "X-Requested-With",
+      "Accept",
+      "Accept-Version",
+      "Content-Length",
+      "Content-MD5",
+      "Content-Type",
+      "Date",
+      "X-Api-Version",
+      "Authorization",
+    ],
   })
 );
 
@@ -100,7 +91,7 @@ app.use((req, res, next) => {
 });
 
 /* =========================================
-   MONGODB CONNECTION (NON-BLOCKING)
+   MONGODB CONNECTION (CACHED)
 ========================================= */
 
 let isConnected = false;
@@ -114,7 +105,7 @@ const initDB = async () => {
     console.log("✅ MongoDB Connected Successfully!");
 
     const adminEmail = (
-      process.env.ADMIN_EMAIL || "admin@supportflow.com"
+      process.env.ADMIN_EMAIL || "admin@supportsphere.com"
     )
       .toLowerCase()
       .trim();
@@ -136,12 +127,8 @@ const initDB = async () => {
   }
 };
 
-// Connect DB asynchronously without freezing request lifecycle
-app.use((req, res, next) => {
-  initDB()
-    .then(() => next())
-    .catch(next);
-});
+// DB initialization call
+initDB();
 
 /* =========================================
    HEALTH CHECK
