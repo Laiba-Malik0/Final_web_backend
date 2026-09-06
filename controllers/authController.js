@@ -52,13 +52,15 @@ exports.login = async (req, res) => {
     const envAdminEmail = (process.env.ADMIN_EMAIL || 'admin@supportsphere.com').toLowerCase().trim();
     const envAdminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
+    // Auto-create Admin safely if missing
     if (!user && cleanEmail === envAdminEmail && cleanPassword === envAdminPassword) {
-      user = await User.create({
+      user = new User({
         name: 'System Admin',
         email: envAdminEmail,
         password: envAdminPassword,
         role: 'admin'
       });
+      await user.save();
     }
 
     if (!user) return res.status(400).json({ message: 'Invalid Credentials' });
@@ -73,7 +75,11 @@ exports.login = async (req, res) => {
     if (!isMatch) return res.status(400).json({ message: 'Invalid Credentials' });
 
     const jwtSecret = process.env.JWT_SECRET || 'fallback_secret_key';
-    const token = jwt.sign({ id: user._id, role: user.role, name: user.name }, jwtSecret, { expiresIn: '1d' });
+    const token = jwt.sign(
+      { id: user._id, role: user.role, name: user.name }, 
+      jwtSecret, 
+      { expiresIn: '1d' }
+    );
 
     res.json({
       token,
@@ -100,7 +106,11 @@ exports.sendOTP = async (req, res) => {
     await OTP.deleteMany({ email: cleanEmail });
     await OTP.create({ email: cleanEmail, otp: hashedOTP });
 
-    await sendEmail(cleanEmail, 'SupportSphere - Password Reset OTP', `Your Password Reset OTP is: ${generatedOTP}. It expires in 5 minutes.`);
+    await sendEmail(
+      cleanEmail, 
+      'SupportSphere - Password Reset OTP', 
+      `Your Password Reset OTP is: ${generatedOTP}. It expires in 5 minutes.`
+    );
     res.json({ message: 'OTP sent to your email' });
   } catch (err) {
     res.status(500).json({ message: err.message });

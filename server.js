@@ -12,7 +12,7 @@ dotenv.config();
 const app = express();
 
 /* =========================================
-   CORS CONFIGURATION
+   CORS CONFIGURATION (VERCEL SERVERLESS SAFE)
 ========================================= */
 
 const allowedOrigins = [
@@ -22,57 +22,46 @@ const allowedOrigins = [
   "http://localhost:3000",
 ].filter(Boolean);
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Requests without an Origin header
-    // (Postman, server-to-server, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
+// 1. FORCE MANUAL HEADERS BEFORE ANY ROUTING / DB (Fixes OPTIONS Preflight Crash)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
 
-    // Allow production frontend
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+  if (
+    allowedOrigins.includes(origin) ||
+    (origin && origin.endsWith(".vercel.app"))
+  ) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      "https://final-web-project-six.vercel.app"
+    );
+  }
 
-    // Allow Vercel preview deployments
-    if (origin.endsWith(".vercel.app")) {
-      return callback(null, true);
-    }
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
+  );
 
-    return callback(new Error("Not allowed by CORS"));
-  },
+  // Return immediately on OPTIONS preflight
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
 
-  methods: [
-    "GET",
-    "POST",
-    "PUT",
-    "DELETE",
-    "PATCH",
-    "OPTIONS",
-  ],
-
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Requested-With",
-    "Accept",
-  ],
-
-  credentials: true,
-
-  optionsSuccessStatus: 204,
-};
-
-/* =========================================
-   MIDDLEWARE
-========================================= */
-
-// CORS must come before routes
-app.use(cors(corsOptions));
-
-// Explicitly handle browser preflight requests
-app.options("*", cors(corsOptions));
+// Standard Express CORS Setup
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
@@ -81,18 +70,18 @@ app.use(express.json());
 ========================================= */
 
 const server = http.createServer(app);
-
 let io = null;
 
-// Socket.IO only for local development
 if (process.env.NODE_ENV !== "production") {
   io = new Server(server, {
-    cors: corsOptions,
+    cors: {
+      origin: "*",
+      credentials: true,
+    },
   });
 
   io.on("connection", (socket) => {
     console.log("⚡ Socket client connected:", socket.id);
-
     socket.on("disconnect", () => {
       console.log("🔥 Socket client disconnected:", socket.id);
     });
@@ -107,75 +96,51 @@ app.use((req, res, next) => {
   req.io = io || {
     emit: () => {},
   };
-
   next();
 });
 
 /* =========================================
-   MONGODB CONNECTION
+   MONGODB CONNECTION (NON-BLOCKING)
 ========================================= */
 
 let isConnected = false;
 
 const initDB = async () => {
-  if (isConnected) {
-    return;
-  }
+  if (isConnected) return;
 
   try {
     await connectDB();
-
     isConnected = true;
-
     console.log("✅ MongoDB Connected Successfully!");
 
-    /* =====================================
-       ADMIN AUTO-SEED
-    ===================================== */
-
     const adminEmail = (
-      process.env.ADMIN_EMAIL ||
-      "admin@supportflow.com"
+      process.env.ADMIN_EMAIL || "admin@supportflow.com"
     )
       .toLowerCase()
       .trim();
 
-    const existingAdmin = await User.findOne({
-      email: adminEmail,
-    });
+    const existingAdmin = await User.findOne({ email: adminEmail });
 
     if (!existingAdmin) {
-      const adminPassword =
-        process.env.ADMIN_PASSWORD || "admin123";
-
+      const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
       await User.create({
         name: "System Admin",
         email: adminEmail,
         password: adminPassword,
         role: "admin",
       });
-
       console.log("✅ Default Admin Verified & Ready");
     }
   } catch (error) {
-    console.error(
-      "❌ Database connection failed:",
-      error.message
-    );
-
-    // Don't crash the Vercel function
-    // Let the request continue so proper error
-    // handling can happen.
+    console.error("❌ Database connection failed:", error.message);
   }
 };
 
-/* =========================================
-   DATABASE MIDDLEWARE
-========================================= */
-
-app.use(async (req, res, next) => {
-  await initDB();
-  next();
+// Connect DB asynchronously without freezing request lifecycle
+app.use((req, res, next) => {
+  initDB()
+    .then(() => next())
+    .catch(next);
 });
 
 /* =========================================
@@ -185,8 +150,7 @@ app.use(async (req, res, next) => {
 app.get("/", (req, res) => {
   res.status(200).json({
     status: "ok",
-    message:
-      "SupportSphere Backend Server is Running Successfully!",
+    message: "SupportSphere Backend Server is Running Successfully!",
   });
 });
 
@@ -194,32 +158,14 @@ app.get("/", (req, res) => {
    API ROUTES
 ========================================= */
 
-app.use(
-  "/api/auth",
-  require("./routes/authRoutes")
-);
-
-app.use(
-  "/api/tickets",
-  require("./routes/ticketRoutes")
-);
-
-/* =========================================
-   ADMIN ROUTES
-========================================= */
+app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api/tickets", require("./routes/ticketRoutes"));
 
 try {
   const adminRoutes = require("./routes/adminRoutes");
-
-  app.use(
-    "/api/admin",
-    adminRoutes
-  );
+  app.use("/api/admin", adminRoutes);
 } catch (error) {
-  console.warn(
-    "⚠️ Admin routes file missing or path incorrect:",
-    error.message
-  );
+  console.warn("⚠️ Admin routes missing/incorrect:", error.message);
 }
 
 /* =========================================
@@ -239,17 +185,9 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err.message);
-
-  if (err.message === "Not allowed by CORS") {
-    return res.status(403).json({
-      success: false,
-      message: "CORS origin not allowed",
-    });
-  }
-
   res.status(500).json({
     success: false,
-    message: "Internal Server Error",
+    message: err.message || "Internal Server Error",
   });
 });
 
@@ -262,15 +200,8 @@ const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== "production") {
   server.listen(PORT, async () => {
     await initDB();
-
-    console.log(
-      `🚀 SupportSphere Server running on port ${PORT}`
-    );
+    console.log(`🚀 SupportSphere Server running on port ${PORT}`);
   });
 }
-
-/* =========================================
-   VERCEL EXPORT
-========================================= */
 
 module.exports = app;
