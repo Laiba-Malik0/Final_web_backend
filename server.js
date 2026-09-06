@@ -25,7 +25,6 @@ const allowedOrigins = [
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    
     if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
       return callback(null, true);
     }
@@ -47,8 +46,9 @@ const corsOptions = {
   ],
 };
 
+// Apply CORS globally & handle Preflight explicitly
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // Handle Explicit Preflight Options Call
+app.options("(.*)", cors(corsOptions));
 
 app.use(express.json());
 
@@ -112,7 +112,6 @@ const initDB = async () => {
   }
 };
 
-// Middleware ensuring DB connection before executing request logic
 app.use(async (req, res, next) => {
   await initDB();
   next();
@@ -159,14 +158,15 @@ app.use((err, req, res, next) => {
 });
 
 /* =========================================
-   LOCAL SERVER LISTEN
+   LOCAL SERVER LISTEN & EXPORT
 ========================================= */
 
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== "production") {
-  server.listen(PORT, () => {
+  server.listen(PORT, async () => {
     console.log(`🚀 SupportSphere Server running on port ${PORT}`);
+    await initDB(); // Immediate console log display on dev start
   });
 }
 
