@@ -12,7 +12,7 @@ dotenv.config();
 const app = express();
 
 /* =========================================
-   CORS CONFIGURATION (EXPLICIT & PRODUCTION SAFE)
+   CORS CONFIGURATION
 ========================================= */
 
 const allowedOrigins = [
@@ -28,7 +28,7 @@ const corsOptions = {
     if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
       return callback(null, true);
     }
-    return callback(null, true);
+    return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -46,11 +46,13 @@ const corsOptions = {
   ],
 };
 
-// Apply CORS globally & handle Preflight explicitly
+// Apply Middlewares
 app.use(cors(corsOptions));
 app.options("(.*)", cors(corsOptions));
-
 app.use(express.json());
+
+// FAVICON HANDLER (Silent response to clean browser console)
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 /* =========================================
    HTTP SERVER + SOCKET.IO
@@ -166,7 +168,7 @@ const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== "production") {
   server.listen(PORT, async () => {
     console.log(`🚀 SupportSphere Server running on port ${PORT}`);
-    await initDB(); // Immediate console log display on dev start
+    await initDB();
   });
 }
 
