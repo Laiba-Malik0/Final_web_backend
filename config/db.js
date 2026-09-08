@@ -8,22 +8,19 @@ if (!cached) {
 }
 
 const connectDB = async () => {
-  // 1. Mongo URI Missing Check
   if (!process.env.MONGO_URI) {
     throw new Error('MONGO_URI is missing in environment variables');
   }
 
-  // 2. Active Connection Reuse Check
   if (cached.conn) {
     return cached.conn;
   }
 
-  // 3. New Connection Pooling Configuration
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
+      maxPoolSize: 50, // Connection pool size 10 se barha kar 50 kar diya
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     };
 

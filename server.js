@@ -46,12 +46,10 @@ const corsOptions = {
   ],
 };
 
-// Apply Middlewares
 app.use(cors(corsOptions));
 app.options("(.*)", cors(corsOptions));
 app.use(express.json());
 
-// FAVICON HANDLER (Silent response to clean browser console)
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 /* =========================================
@@ -94,10 +92,9 @@ const initDB = async () => {
   try {
     await connectDB();
     isConnected = true;
-    console.log("✅ MongoDB Connected Successfully!");
 
     const adminEmail = (process.env.ADMIN_EMAIL || "admin@supportsphere.com").toLowerCase().trim();
-    const existingAdmin = await User.findOne({ email: adminEmail });
+    const existingAdmin = await User.findOne({ email: adminEmail }).lean();
 
     if (!existingAdmin) {
       const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
@@ -107,7 +104,6 @@ const initDB = async () => {
         password: adminPassword,
         role: "admin",
       });
-      console.log("✅ Default Admin Verified & Ready");
     }
   } catch (error) {
     console.error("❌ Database connection failed:", error.message);
@@ -166,9 +162,9 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== "production") {
-  server.listen(PORT, async () => {
+  server.listen(PORT, () => {
     console.log(`🚀 SupportSphere Server running on port ${PORT}`);
-    await initDB();
+    initDB(); // Non-blocking async execution
   });
 }
 

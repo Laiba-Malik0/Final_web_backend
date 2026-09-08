@@ -26,10 +26,10 @@ exports.createTicket = async (req, res) => {
 
     const savedTicket = await ticket.save();
     
-    // Populate before sending response so frontend immediately gets names
     const populatedTicket = await Ticket.findById(savedTicket._id)
       .populate("customer", "name email")
-      .populate("assignedWorker", "name email department");
+      .populate("assignedWorker", "name email department")
+      .lean();
 
     res.status(201).json({ success: true, ticket: populatedTicket });
   } catch (error) {
@@ -44,7 +44,8 @@ exports.getAllTickets = async (req, res) => {
     const tickets = await Ticket.find()
       .populate("customer", "name email")
       .populate("assignedWorker", "name email department")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.status(200).json(tickets);
   } catch (error) {
@@ -59,7 +60,8 @@ exports.getCustomerTickets = async (req, res) => {
     const tickets = await Ticket.find({ customer: userId })
       .populate("customer", "name email")
       .populate("assignedWorker", "name email department")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.status(200).json(tickets);
   } catch (error) {
@@ -67,7 +69,7 @@ exports.getCustomerTickets = async (req, res) => {
   }
 };
 
-// 4. GET WORKER TICKETS (FIXED: Handles String vs ObjectId)
+// 4. GET WORKER TICKETS
 exports.getWorkerTickets = async (req, res) => {
   try {
     const rawWorkerId = req.user?._id || req.user?.id;
@@ -76,19 +78,20 @@ exports.getWorkerTickets = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized: Worker ID missing" });
     }
 
-    // Convert string ID to Mongoose ObjectId safely
-    const workerObjectId = new mongoose.Types.ObjectId(rawWorkerId);
+    const queryFilter = mongoose.Types.ObjectId.isValid(rawWorkerId)
+      ? {
+          $or: [
+            { assignedWorker: new mongoose.Types.ObjectId(rawWorkerId) },
+            { assignedWorker: rawWorkerId.toString() }
+          ]
+        }
+      : { assignedWorker: rawWorkerId.toString() };
 
-    // Match both string and ObjectId versions to guarantee finding all tickets
-    const tickets = await Ticket.find({
-      $or: [
-        { assignedWorker: workerObjectId },
-        { assignedWorker: rawWorkerId.toString() }
-      ]
-    })
+    const tickets = await Ticket.find(queryFilter)
       .populate("customer", "name email")
       .populate("assignedWorker", "name email department")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.status(200).json(tickets);
   } catch (error) {
@@ -126,7 +129,8 @@ exports.updateTicketStatus = async (req, res) => {
 
     const updatedTicket = await Ticket.findById(id)
       .populate("customer", "name email")
-      .populate("assignedWorker", "name email department");
+      .populate("assignedWorker", "name email department")
+      .lean();
 
     res.status(200).json({ 
       success: true, 
@@ -158,7 +162,8 @@ exports.updateTicket = async (req, res) => {
 
     const updatedTicket = await Ticket.findByIdAndUpdate(id, updateFields, { new: true })
       .populate("customer", "name email")
-      .populate("assignedWorker", "name email department");
+      .populate("assignedWorker", "name email department")
+      .lean();
 
     if (!updatedTicket) return res.status(404).json({ message: "Ticket not found" });
 
