@@ -23,6 +23,10 @@ const userSchema = new mongoose.Schema({
     enum: ['customer', 'worker', 'admin'], 
     default: 'customer' 
   },
+  specialization: { 
+    type: String, 
+    default: '' // e.g. "Plumbing Fix", "Electrical Issue"
+  },
   department: { 
     type: String, 
     default: 'General' 
@@ -51,5 +55,4 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Vercel Serverless Re-compilation Safeguard
 module.exports = mongoose.models.User || mongoose.model('User', userSchema);

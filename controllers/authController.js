@@ -5,9 +5,14 @@ const jwt = require('jsonwebtoken');
 const sendEmail = require('../utils/sendEmailTest');
 
 exports.register = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, specialization } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Name, email, and password are required' });
+  }
+
+  // Worker ke liye specialization zaroori hai
+  if (role === 'worker' && !specialization) {
+    return res.status(400).json({ message: 'Please select a specialization for the Worker' });
   }
 
   try {
@@ -29,7 +34,8 @@ exports.register = async (req, res) => {
       name: name.trim(),
       email: cleanEmail,
       password: cleanPassword, 
-      role: role || 'customer'
+      role: role || 'customer',
+      specialization: role === 'worker' ? specialization : ''
     });
 
     res.status(201).json({ message: 'Registration successful' });
@@ -52,7 +58,6 @@ exports.login = async (req, res) => {
     const envAdminEmail = (process.env.ADMIN_EMAIL || 'admin@supportsphere.com').toLowerCase().trim();
     const envAdminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-    // Auto-create Admin safely if missing
     if (!user && cleanEmail === envAdminEmail && cleanPassword === envAdminPassword) {
       user = new User({
         name: 'System Admin',
@@ -83,7 +88,7 @@ exports.login = async (req, res) => {
 
     res.json({
       token,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role }
+      user: { id: user._id, name: user.name, email: user.email, role: user.role, specialization: user.specialization }
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -159,7 +164,6 @@ exports.resetPassword = async (req, res) => {
     const user = await User.findOne({ email: cleanEmail });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Explicit bcrypt hashing so password is never stored as plain text
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(cleanPassword, salt);
     await user.save();
@@ -172,9 +176,10 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+// Workers ki list mein ab Specialization bhi pass hogi
 exports.getWorkers = async (req, res) => {
   try {
-    const workers = await User.find({ role: 'worker' }).select('_id name email department');
+    const workers = await User.find({ role: 'worker' }).select('_id name email department specialization');
     res.json(workers);
   } catch (err) {
     res.status(500).json({ message: err.message });
