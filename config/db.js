@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 
-// Serverless Environment ke liye Global Cache
 let cached = global.mongoose;
 
 if (!cached) {
@@ -18,8 +17,8 @@ const connectDB = async () => {
 
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false,
-      maxPoolSize: 50, // Connection pool size 10 se barha kar 50 kar diya
+      bufferCommands: true, // Buffer commands true rakhen taake initial connection setup ke waqt crash na ho
+      maxPoolSize: 10,       // Serverless environments (Vercel) ke liye 10 ideal hai, 50 se DB pool exhaust hota hai
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     };

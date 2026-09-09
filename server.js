@@ -9,6 +9,15 @@ const User = require("./models/User");
 
 dotenv.config();
 
+// PROCESS CRASH SHIELD - Prevents backend from crashing on unhandled errors
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("⚠️ Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception thrown:", err);
+});
+
 const app = express();
 
 /* =========================================
@@ -28,7 +37,8 @@ const corsOptions = {
     if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app")) {
       return callback(null, true);
     }
-    return callback(new Error("Not allowed by CORS"));
+    // Crash hone se bachane ke liye Callback error ki jagah response block karein
+    return callback(null, false);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -47,7 +57,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options("(.*)", cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
@@ -84,35 +94,42 @@ app.use((req, res, next) => {
    SERVERLESS MONGODB CONNECTION MIDDLEWARE
 ========================================= */
 
-let isConnected = false;
+let isAdminCreated = false;
 
 const initDB = async () => {
-  if (isConnected) return;
+  await connectDB();
 
-  try {
-    await connectDB();
-    isConnected = true;
+  // Admin account checking runs ONLY ONCE per server spin-up, not on every HTTP request
+  if (!isAdminCreated) {
+    try {
+      const adminEmail = (process.env.ADMIN_EMAIL || "admin@supportsphere.com").toLowerCase().trim();
+      const existingAdmin = await User.findOne({ email: adminEmail }).lean();
 
-    const adminEmail = (process.env.ADMIN_EMAIL || "admin@supportsphere.com").toLowerCase().trim();
-    const existingAdmin = await User.findOne({ email: adminEmail }).lean();
-
-    if (!existingAdmin) {
-      const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
-      await User.create({
-        name: "System Admin",
-        email: adminEmail,
-        password: adminPassword,
-        role: "admin",
-      });
+      if (!existingAdmin) {
+        const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+        await User.create({
+          name: "System Admin",
+          email: adminEmail,
+          password: adminPassword,
+          role: "admin",
+        });
+        console.log("✅ Default Admin User created");
+      }
+      isAdminCreated = true;
+    } catch (err) {
+      console.error("⚠️ Admin creation check failed:", err.message);
     }
-  } catch (error) {
-    console.error("❌ Database connection failed:", error.message);
   }
 };
 
 app.use(async (req, res, next) => {
-  await initDB();
-  next();
+  try {
+    await initDB();
+    next();
+  } catch (error) {
+    console.error("❌ Database Middleware Error:", error.message);
+    res.status(500).json({ success: false, message: "Database connection failed" });
+  }
 });
 
 /* =========================================
@@ -164,7 +181,6 @@ const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== "production") {
   server.listen(PORT, () => {
     console.log(`🚀 SupportSphere Server running on port ${PORT}`);
-    initDB(); // Non-blocking async execution
   });
 }
 
