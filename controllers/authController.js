@@ -164,13 +164,14 @@ exports.resetPassword = async (req, res) => {
     const user = await User.findOne({ email: cleanEmail });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(cleanPassword, salt);
+    // ✅ FIXED: Direct raw string assign ki hai. 
+    // User.js model ka pre('save') hook isey single hashing ke sath safe save karega.
+    user.password = cleanPassword; 
     await user.save();
 
     await OTP.deleteMany({ email: cleanEmail });
 
-    res.json({ message: 'Password updated successfully' });
+    res.json({ message: 'Password updated successfully. Please login with your new password.' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
